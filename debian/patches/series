@@ -1,0 +1,23 @@
+01_set-default-path.patch
+02_fix-apparmor-profile.patch
+05_debianize-pam-files.patch
+06_change-user-dirs.patch
+08_reset-SIGPIPE-before-exec.patch
+0006-Add-ICEAuthority-file-to-the-AppArmor-profile-for-gu.patch
+# deepin patches
+add_nopasswdlogin.patch
+0001-multi-pipe-mode.patch
+10-dm-tool-lock-function-patch.patch
+uos-01-fix-select-unused-tty.patch
+12_remove_redundant_judgments_in_response.patch
+feat-Added-reading-of-Name-field.patch
+fix-x-authority-write.patch
+fix-wayland_tty_bug.patch
+fix-waylang-release-tty.patch
+uniontech001_session_use_default_locale.patch
+uniontech002_fix_Glibc_2.33.patch
+uos-02-fix-shell-nologin.patch
+uos-03-feat-can-switch-active-session.patch
+0002-feat-whitebox-scheme-adjustment.patch
+chore-adapt-to-qt6.patch
+uos-feat-dde-quick-login.patch

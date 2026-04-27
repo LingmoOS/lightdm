@@ -1,0 +1,243 @@
+Subject: [PATCH] add dde quick login feature
+---
+Index: common/configuration.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/common/configuration.c b/common/configuration.c
+--- a/common/configuration.c	(revision e90e49904e28ee9ab9821ce1755e0f5608a35bb0)
++++ b/common/configuration.c	(date 1749003588763)
+@@ -391,6 +391,7 @@
+     g_hash_table_insert (config->priv->seat_keys, "autologin-session", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "exit-on-failure", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "xdg-seat", GINT_TO_POINTER (KEY_DEPRECATED));
++    g_hash_table_insert (config->priv->seat_keys, "quicklogin-enabled", GINT_TO_POINTER (KEY_SUPPORTED));
+ 
+     g_hash_table_insert (config->priv->xdmcp_keys, "enabled", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->xdmcp_keys, "port", GINT_TO_POINTER (KEY_SUPPORTED));
+Index: src/greeter.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/greeter.c b/src/greeter.c
+--- a/src/greeter.c	(revision e90e49904e28ee9ab9821ce1755e0f5608a35bb0)
++++ b/src/greeter.c	(date 1749004299532)
+@@ -525,9 +525,11 @@
+ 
+     /* Use non-interactive service for autologin user */
+     const gchar *autologin_username = g_hash_table_lookup (priv->hints, "autologin-user");
++    const gchar *quicklogin_enabled = g_hash_table_lookup (priv->hints, "quicklogin-enabled");
+     const gchar *service;
+     gboolean is_interactive;
+-    if (autologin_username != NULL && g_strcmp0 (username, autologin_username) == 0)
++    if ((autologin_username != NULL && g_strcmp0 (username, autologin_username) == 0)
++        || (quicklogin_enabled != NULL && g_strcmp0 (quicklogin_enabled, "true") == 0))
+     {
+         service = priv->autologin_pam_service;
+         is_interactive = FALSE;
+Index: src/seat.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/seat.c b/src/seat.c
+--- a/src/seat.c	(revision e90e49904e28ee9ab9821ce1755e0f5608a35bb0)
++++ b/src/seat.c	(date 1749005422481)
+@@ -18,6 +18,7 @@
+ #include "guest-account.h"
+ #include "greeter-session.h"
+ #include "session-config.h"
++#include "common/user-list.h"
+ 
+ enum {
+     SESSION_ADDED,
+@@ -1192,6 +1193,11 @@
+             if (!session_name && g_strcmp0 (user_get_name (user), autologin_username) == 0)
+                 session_name = seat_get_string_property (seat, "autologin-session");
+ 
++            /* Override session for quicklogin if configured */
++            const gchar *quicklogin_enabled = seat_get_string_property (seat, "quicklogin-enabled");
++            if (!session_name && g_strcmp0 (quicklogin_enabled, "true") == 0)
++                session_name = seat_get_string_property (seat, "quicklogin-session");
++
+             if (!session_name)
+                 session_name = user_get_xsession (user);
+             language = user_get_language (user);
+@@ -1328,6 +1334,12 @@
+     const gchar *autologin_username = seat_get_string_property (seat, "autologin-user");
+     if (g_strcmp0 (autologin_username, "") == 0)
+         autologin_username = NULL;
++
++    /* Configure for quick login */
++    const gchar *quicklogin_enabled = seat_get_string_property (seat, "quicklogin-enabled");
++    if (g_strcmp0 (quicklogin_enabled, "") == 0)
++        quicklogin_enabled = NULL;
++
+     const gchar *autologin_session = seat_get_string_property (seat, "autologin-session");
+     if (g_strcmp0 (autologin_session, "") == 0)
+         autologin_session = NULL;
+@@ -1339,6 +1351,8 @@
+         greeter_set_hint (greeter, "autologin-timeout", value);
+         if (autologin_username)
+             greeter_set_hint (greeter, "autologin-user", autologin_username);
++        if (quicklogin_enabled)
++            greeter_set_hint (greeter, "quicklogin-enabled", quicklogin_enabled);
+         if (autologin_session)
+             greeter_set_hint (greeter, "autologin-session", autologin_session);
+         if (autologin_guest)
+@@ -1714,6 +1728,86 @@
+     return priv->stopping;
+ }
+ 
++const gchar *
++get_deepin_greeter_last_username (void)
++{
++    GError *error = NULL;
++    gchar *name = NULL;
++
++    g_autoptr(GKeyFile) key_file = g_key_file_new();
++    if (!g_key_file_load_from_file(key_file, "/var/lib/lightdm/lightdm-deepin-greeter/state_user", G_KEY_FILE_NONE, &error))
++    {
++        g_debug("Failed to load key file: %s", error->message);
++        return NULL;
++    }
++
++    g_autofree gchar *value = g_key_file_get_value(key_file, "General", "last-user", &error);
++    if (error != NULL)
++    {
++        g_debug("Failed to get value: %s", error->message);
++        return NULL;
++    }
++    // 删除"{"和"}"
++    if (value[0] == '{' && value[strlen(value) - 1] == '}')
++    {
++        value = g_strndup(value + 1, strlen(value) - 2);
++    }
++
++
++    gchar **tokens = g_strsplit(value, ",", -1);
++    for (gchar **token = tokens; *token; token++)
++    {
++        gchar **pair = g_strsplit(*token, ":", -1);
++        gchar *key = g_strstrip(pair[0]);
++        gchar *val = g_strstrip(pair[1]);
++
++        // Find the "Name" key and extract its value
++        if (g_strcmp0(key, "\"Name\"") == 0)
++        {
++            name = g_strstrip(g_strndup(val + 1, strlen(val) - 2));
++            break;
++        }
++
++        g_strfreev(pair);
++    }
++
++    g_strfreev(tokens);
++    return name;
++}
++
++gboolean
++is_username_in_quicklogin_users (const gchar* username)
++{
++    GError *error = NULL;
++    gboolean result = FALSE;
++
++    g_autoptr(GKeyFile) key_file = g_key_file_new();
++    if (!g_key_file_load_from_file(key_file, "/var/lib/lightdm/lightdm-deepin-greeter/state_user", G_KEY_FILE_NONE, &error))
++    {
++        g_debug("Failed to load key file: %s", error->message);
++        return result;
++    }
++
++    g_autofree gchar *value = g_key_file_get_value(key_file, "General", "quicklogin-users", &error);
++    if (error != NULL)
++    {
++        g_debug("Failed to get value: %s", error->message);
++        return result;
++    }
++
++    gchar **tokens = g_strsplit(value, ";", -1);
++    for (gchar** user = tokens; *user != NULL; user++) {
++        if (g_strcmp0(g_strstrip(*user), username) == 0 && *user != NULL) {
++            result = TRUE;
++            break;
++        }
++    }
++
++    g_strfreev(tokens);
++
++    return result;
++}
++
+ static void
+ seat_real_setup (Seat *seat)
+ {
+@@ -1728,6 +1822,10 @@
+     const gchar *autologin_username = seat_get_string_property (seat, "autologin-user");
+     if (g_strcmp0 (autologin_username, "") == 0)
+         autologin_username = NULL;
++    /* Get quicklogin settings */
++    const gchar *quicklogin_enabled = seat_get_string_property (seat, "quicklogin-enabled");
++    if (g_strcmp0 (quicklogin_enabled, "") == 0)
++        quicklogin_enabled = NULL;
+     int autologin_timeout = seat_get_integer_property (seat, "autologin-user-timeout");
+     gboolean autologin_guest = seat_get_boolean_property (seat, "autologin-guest");
+     gboolean autologin_in_background = seat_get_boolean_property (seat, "autologin-in-background");
+@@ -1740,6 +1838,19 @@
+             session = create_guest_session (seat, NULL);
+         else if (autologin_username != NULL)
+             session = create_user_session (seat, autologin_username, TRUE);
++        /* Quicklogin enabled */
++        else if (g_strcmp0 (quicklogin_enabled, "true") == 0 )
++        {
++            g_debug("start quicklogin");
++            const gchar *last_username = get_deepin_greeter_last_username ();
++            if (last_username != NULL && is_username_in_quicklogin_users(last_username))
++            {
++                g_debug("quicklogin last username: %s", last_username);
++                session = create_user_session (seat, last_username, TRUE);
++            }
++            if (session)
++                session_set_env(session, "DDE_QUICKLOGIN", "true");
++        }
+ 
+         if (session)
+             session_set_pam_service (session, seat_get_string_property (seat, "pam-autologin-service"));
+Index: src/seat.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/seat.h b/src/seat.h
+--- a/src/seat.h	(revision e90e49904e28ee9ab9821ce1755e0f5608a35bb0)
++++ b/src/seat.h	(date 1749005045160)
+@@ -118,6 +118,10 @@
+ 
+ gboolean seat_get_is_stopping (Seat *seat);
+ 
++const gchar *get_deepin_greeter_last_username (void);
++
++gboolean is_username_in_quicklogin_users (const gchar* username);
++
+ G_END_DECLS
+ 
+ #endif /* SEAT_H_ */
+Index: data/pam/lightdm-autologin
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/data/pam/lightdm-autologin b/data/pam/lightdm-autologin
+--- a/data/pam/lightdm-autologin	(revision e90e49904e28ee9ab9821ce1755e0f5608a35bb0)
++++ b/data/pam/lightdm-autologin	(date 1749005102521)
+@@ -40,7 +40,7 @@
+ # Can't change password
+ # Unlock keyring when user no passwd login
+ -session  optional  pam_gnome_keyring.so auto_start
+-
++-session  optional  pam_deepin_keyring.so
+ password  required pam_deny.so
+ 
+ @include common-password

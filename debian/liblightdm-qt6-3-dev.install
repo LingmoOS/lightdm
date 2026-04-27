@@ -1,0 +1,4 @@
+usr/include/lightdm-qt6-*
+usr/lib/*/pkgconfig/liblightdm-qt6-*.pc
+usr/lib/*/liblightdm-qt6-*.a
+usr/lib/*/liblightdm-qt6-*.so

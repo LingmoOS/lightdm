@@ -1,0 +1,386 @@
+Subject: [PATCH] chore: adapt to qt6
+
+as title
+
+Log: as title
+---
+Index: liblightdm-qt/QLightDM/sessionsmodel.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/QLightDM/sessionsmodel.h b/liblightdm-qt/QLightDM/sessionsmodel.h
+--- a/liblightdm-qt/QLightDM/sessionsmodel.h	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/QLightDM/sessionsmodel.h	(date 1737340975717)
+@@ -44,6 +44,8 @@
+         QVariant data(const QModelIndex &index, int role=Qt::DisplayRole) const;
+ 
+     protected:
++        QHash<int,QByteArray> roleNames() const override;
++
+         SessionsModelPrivate *d_ptr;
+ 
+     private:
+Index: liblightdm-qt/power.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/power.cpp b/liblightdm-qt/power.cpp
+--- a/liblightdm-qt/power.cpp	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/power.cpp	(date 1736753226189)
+@@ -78,8 +78,8 @@
+     return lightdm_restart (NULL);
+ }
+ 
+-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+-#include "power_moc5.cpp"
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++#include "power_moc6.cpp"
+ #else
+-#include "power_moc4.cpp"
++#include "power_moc5.cpp"
+ #endif
+Index: liblightdm-qt/Makefile.am
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/Makefile.am b/liblightdm-qt/Makefile.am
+--- a/liblightdm-qt/Makefile.am	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/Makefile.am	(date 1737358810790)
+@@ -7,6 +7,9 @@
+ liblightdm_qt5_3_la_LIBADD = \
+ 	$(LIBLIGHTDM_QT5_LIBS) \
+ 	$(common_libadd)
++liblightdm_qt6_3_la_LIBADD = \
++    $(LIBLIGHTDM_QT6_LIBS) \
++    $(common_libadd)
+ 
+ common_cflags = \
+ 	$(WARN_CXXFLAGS) \
+@@ -21,6 +24,11 @@
+ 	-DQT_DISABLE_DEPRECATED_BEFORE="QT_VERSION_CHECK(4, 0, 0)" \
+ 	$(LIBLIGHTDM_QT5_CFLAGS) \
+ 	$(common_cflags)
++liblightdm_qt6_3_la_CXXFLAGS = \
++	-fPIC \
++	-DQT_DISABLE_DEPRECATED_BEFORE="QT_VERSION_CHECK(5, 0, 0)" \
++	$(LIBLIGHTDM_QT6_CFLAGS) \
++	$(common_cflags)
+ 
+ common_headers = \
+ 	QLightDM/Greeter \
+@@ -34,6 +42,7 @@
+ 
+ liblightdm_qt_3includedir=$(includedir)/lightdm-qt-3/QLightDM
+ liblightdm_qt5_3includedir=$(includedir)/lightdm-qt5-3/QLightDM
++liblightdm_qt6_3includedir=$(includedir)/lightdm-qt6-3/QLightDM
+ 
+ common_sources = \
+ 	greeter.cpp \
+@@ -46,6 +55,9 @@
+ liblightdm_qt5_3_la_SOURCES = \
+ 	$(common_sources) \
+ 	$(liblightdm_qt5_3include_HEADERS)
++liblightdm_qt6_3_la_SOURCES = \
++	$(common_sources) \
++	$(liblightdm_qt6_3include_HEADERS)
+ 
+ pkgconfigdir = $(libdir)/pkgconfig
+ 
+@@ -73,6 +85,13 @@
+ pkgconfig_DATA += liblightdm-qt5-3.pc
+ endif
+ 
++if COMPILE_LIBLIGHTDM_QT6
++lib_LTLIBRARIES += liblightdm-qt6-3.la
++liblightdm_qt6_3include_HEADERS = $(common_headers)
++BUILT_SOURCES += $(common_sources:.cpp=_moc6.cpp)
++pkgconfig_DATA += liblightdm-qt6-3.pc
++endif
++
+ # Support pretty printing MOC
+ AM_V_MOC4 = $(am__v_MOC4_$(V))
+ am__v_MOC4_ = $(am__v_MOC4_$(AM_DEFAULT_VERBOSITY))
+@@ -85,3 +104,9 @@
+ am__v_MOC5_0 = @echo "  MOC5    " $@;
+ %_moc5.cpp: QLightDM/%.h
+ 	$(AM_V_MOC5) $(MOC5) $< -o $@
++
++AM_V_MOC6 = $(am__v_MOC6_$(V))
++am__v_MOC6_ = $(am__v_MOC6_$(AM_DEFAULT_VERBOSITY))
++am__v_MOC6_0 = @echo "  MOC6    " $@;
++%_moc6.cpp: QLightDM/%.h
++	$(AM_V_MOC6) $(MOC6) $< -o $@
+Index: m4/qt-validate-moc.m4
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/m4/qt-validate-moc.m4 b/m4/qt-validate-moc.m4
+new file mode 100644
+--- /dev/null	(date 1736752290175)
++++ b/m4/qt-validate-moc.m4	(date 1736752290175)
+@@ -0,0 +1,33 @@
++dnl Qt6
++AC_DEFUN([QT6_IF_QT6_MOC],
++    AS_IF([$1 -v >/dev/null 2>/dev/null &&
++        (test "`$1 -v 2<&1 | grep -o 'Qt [[[0-9]]]\+'`" = "Qt 6" ||
++         test "`$1 -v 2<&1 | grep -o 'moc [[[0-9]]]\+'`" = "moc 6" ||
++         test "`$1 -v 2<&1 | grep -o 'moc-qt[[[0-9]]]\+'`" = "moc-qt6")],
++        [$2]))
++
++dnl Set MOCCMD to $1 if it is the Qt 6 "moc".
++AC_DEFUN([QT6_TRY_MOC],
++    [QT6_IF_QT6_MOC([$1], [MOCCMD="$1"])])
++
++dnl If a usable moc command is found set $1
++AC_DEFUN([QT6_VALIDATE_MOC], [
++    AC_MSG_CHECKING([the Qt 6 moc command])
++    dnl Try to find a Qt 6 'moc'
++    AS_IF([test "x$MOCCMD" = "x"],
++        [for mocpath in "moc" "qtchooser -run-tool=moc -qt=6" "moc-qt6" \
++                        "/usr/lib/qt6/moc" "/usr/lib/qt6/libexec/moc" \
++                        "/usr/lib64/qt6/moc" "/usr/lib64/qt6/libexec/moc" \
++                        "$prefix/lib/qt6/moc" "$prefix/lib/qt6/libexec/moc" \
++                        "$libexecdir/moc" "$libexecdir/qt6/moc" \
++                        "$libdir/qt6/moc" "$libdir/qt6/libexec/moc"
++        do
++            if test "x$MOCCMD" = "x" ; then
++                QT6_TRY_MOC([$mocpath])
++            fi
++        done
++        AS_IF([test "x$MOCCMD" = "x"],
++            [AC_MSG_RESULT([not found]); AC_SUBST($1,"")],
++            [AC_MSG_RESULT([$MOCCMD]); AC_SUBST($1,"$MOCCMD")])
++        MOCCMD=""],
++        [AC_MSG_ERROR(["MOCCMD should not be set"])])])
+\ No newline at end of file
+Index: liblightdm-qt/greeter.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/greeter.cpp b/liblightdm-qt/greeter.cpp
+--- a/liblightdm-qt/greeter.cpp	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/greeter.cpp	(date 1736753198237)
+@@ -328,8 +328,8 @@
+     return QString::fromUtf8(lightdm_get_motd());
+ }
+ 
+-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+-#include "greeter_moc5.cpp"
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++#include "greeter_moc6.cpp"
+ #else
+-#include "greeter_moc4.cpp"
++#include "greeter_moc5.cpp"
+ #endif
+Index: configure.ac
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/configure.ac b/configure.ac
+--- a/configure.ac	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/configure.ac	(date 1737344671507)
+@@ -155,6 +155,35 @@
+ fi
+ AM_CONDITIONAL(COMPILE_LIBLIGHTDM_QT5, test x"$compile_liblightdm_qt5" != "xno")
+ 
++AC_ARG_ENABLE(liblightdm-qt6,
++	AS_HELP_STRING([--enable-liblightdm-qt6],[Enable LightDM client Qt6 libraries [[default=auto]]]),
++	[enable_liblightdm_qt6=$enableval],
++	[enable_liblightdm_qt6="auto"])
++compile_liblightdm_qt6=no
++if test x"$enable_liblightdm_qt6" != "xno"; then
++    PKG_CHECK_MODULES(LIBLIGHTDM_QT6, [
++        Qt6Core
++        Qt6DBus
++        Qt6Gui
++    ],
++    [compile_liblightdm_qt6=yes],
++    [if test "x$enable_liblightdm_qt6" != xauto; then
++        AC_MSG_FAILURE(
++          [--enable-liblightdm-qt6 was given, but test for Qt6 failed])
++      fi
++    ])
++
++    QT6_VALIDATE_MOC(MOC6)
++    if test x$MOC6 = x; then
++        compile_liblightdm_qt6=no
++        if test "x$enable_liblightdm_qt6" != xauto; then
++            AC_MSG_FAILURE(
++              [--enable-liblightdm-qt6 was given, but MOC not found])
++        fi
++    fi
++fi
++AM_CONDITIONAL(COMPILE_LIBLIGHTDM_QT6, test x"$compile_liblightdm_qt6" != "xno")
++
+ AC_ARG_ENABLE([libaudit],
+     AS_HELP_STRING([--enable-libaudit],
+                    [Enable libaudit logging of login and logout events [[default=auto]]]),
+@@ -247,6 +276,7 @@
+ liblightdm-qt/Makefile
+ liblightdm-qt/liblightdm-qt-3.pc
+ liblightdm-qt/liblightdm-qt5-3.pc
++liblightdm-qt/liblightdm-qt6-3.pc
+ po/Makefile.in
+ src/Makefile
+ tests/Makefile
+@@ -270,6 +300,7 @@
+         Vala bindings:            $enable_vala
+         liblightdm-qt:            $compile_liblightdm_qt4
+         liblightdm-qt5:           $compile_liblightdm_qt5
++        liblightdm-qt6:           $compile_liblightdm_qt6
+         libaudit support:         $use_libaudit
+         Enable tests:             $enable_tests
+ "
+Index: liblightdm-qt/sessionsmodel.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/sessionsmodel.cpp b/liblightdm-qt/sessionsmodel.cpp
+--- a/liblightdm-qt/sessionsmodel.cpp	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/sessionsmodel.cpp	(date 1737341906239)
+@@ -90,10 +90,6 @@
+ {
+     Q_D(SessionsModel);
+ 
+-    QHash<int, QByteArray> roles = roleNames();
+-    roles[KeyRole] = "key";
+-    setRoleNames(roles);
+-
+     d->loadSessions(SessionsModel::LocalSessions);
+ }
+ 
+@@ -103,10 +99,6 @@
+ {
+     Q_D(SessionsModel);
+ 
+-    QHash<int, QByteArray> roles = roleNames();
+-    roles[KeyRole] = "key";
+-    setRoleNames(roles);
+-
+     d->loadSessions(sessionType);
+ }
+ 
+@@ -150,8 +142,15 @@
+     return QVariant();
+ }
+ 
+-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+-#include "sessionsmodel_moc5.cpp"
++QHash<int, QByteArray> SessionsModel::roleNames() const
++{
++    QHash<int, QByteArray> roles = QAbstractListModel::roleNames();
++    roles[KeyRole] = "key";
++    return roles;
++}
++
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++#include "sessionsmodel_moc6.cpp"
+ #else
+-#include "sessionsmodel_moc4.cpp"
++#include "sessionsmodel_moc5.cpp"
+ #endif
+Index: liblightdm-qt/usersmodel.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/usersmodel.cpp b/liblightdm-qt/usersmodel.cpp
+--- a/liblightdm-qt/usersmodel.cpp	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/usersmodel.cpp	(date 1737341889655)
+@@ -185,21 +185,8 @@
+     d_ptr(new UsersModelPrivate(this))
+ {
+     Q_D(UsersModel);
+-    // Extend roleNames (we want to keep the "display" role)
+-    QHash<int, QByteArray> roles = roleNames();
+-    roles[NameRole] = "name";
+-    roles[RealNameRole] = "realName";
+-    roles[LoggedInRole] = "loggedIn";
+-    roles[BackgroundRole] = "background";
+-    roles[BackgroundPathRole] = "backgroundPath";
+-    roles[SessionRole] = "session";
+-    roles[HasMessagesRole] = "hasMessages";
+-    roles[ImagePathRole] = "imagePath";
+-    roles[UidRole] = "uid";
+-    roles[IsLockedRole] = "isLocked";
+-    setRoleNames(roles);
++
+     d->loadUsers();
+-
+ }
+ 
+ UsersModel::~UsersModel()
+@@ -257,9 +244,26 @@
+     return QVariant();
+ }
+ 
++QHash<int, QByteArray> UsersModel::roleNames() const
++{
++    // Extend roleNames (we want to keep the "display" role)
++    QHash<int, QByteArray> roles = QAbstractListModel::roleNames();
++    roles[NameRole] = "name";
++    roles[RealNameRole] = "realName";
++    roles[LoggedInRole] = "loggedIn";
++    roles[BackgroundRole] = "background";
++    roles[BackgroundPathRole] = "backgroundPath";
++    roles[SessionRole] = "session";
++    roles[HasMessagesRole] = "hasMessages";
++    roles[ImagePathRole] = "imagePath";
++    roles[UidRole] = "uid";
++    roles[IsLockedRole] = "isLocked";
+ 
+-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+-#include "usersmodel_moc5.cpp"
++    return roles;
++}
++
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++#include "usersmodel_moc6.cpp"
+ #else
+-#include "usersmodel_moc4.cpp"
++#include "usersmodel_moc5.cpp"
+ #endif
+Index: liblightdm-qt/liblightdm-qt6-3.pc.in
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/liblightdm-qt6-3.pc.in b/liblightdm-qt/liblightdm-qt6-3.pc.in
+new file mode 100644
+--- /dev/null	(date 1736739967783)
++++ b/liblightdm-qt/liblightdm-qt6-3.pc.in	(date 1736739967783)
+@@ -0,0 +1,11 @@
++prefix=@prefix@
++exec_prefix=@exec_prefix@
++libdir=@libdir@
++includedir=@includedir@
++
++Name: liblightdm-qt6
++Description: LightDM Qt6 client library
++Version: @VERSION@
++Requires: Qt6Core Qt6Gui
++Libs: -L${libdir} -llightdm-qt6-3
++Cflags: -I${includedir}/lightdm-qt6-3
+Index: liblightdm-qt/QLightDM/usersmodel.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/liblightdm-qt/QLightDM/usersmodel.h b/liblightdm-qt/QLightDM/usersmodel.h
+--- a/liblightdm-qt/QLightDM/usersmodel.h	(revision 29b8bd2b38b8f9c16e1397f334706838642cc949)
++++ b/liblightdm-qt/QLightDM/usersmodel.h	(date 1737341616766)
+@@ -46,6 +46,7 @@
+     QVariant data(const QModelIndex &index, int role) const;
+ 
+ protected:
++    QHash<int,QByteArray> roleNames() const override;
+ 
+ private:
+     UsersModelPrivate * const d_ptr;

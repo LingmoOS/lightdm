@@ -1,0 +1,98 @@
+From 3dddb922127fb72cffc780fc539805d4189d5e34 Mon Sep 17 00:00:00 2001
+From: changlianzhi <changlianzhi@uniontech.com>
+Date: Mon, 6 Dec 2021 08:49:29 +0800
+Subject: [PATCH] feat: Added reading of "Name" field
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Added reading of the "Name" field, if the field exists in the
+"/usr/share/xsessions/deepin.desktop" or "/usr/share/wayland-sessions
+/Wayland.desktop" file, set its value Is the value of the environment
+variable "DESKTOP_SESSION"; if it does not exist, the value of
+"DESKTOP_SESSION" is still the name of the session as before.
+
+Signed-off-by: changlianzhi <changlianzhi@uniontech.com>
+Change-Id: I5f06a7f4feac93fed5133ae3aca8b02d6c8773f6
+---
+ src/seat.c           | 11 ++++++++++-
+ src/session-config.c | 12 ++++++++++++
+ src/session-config.h |  2 ++
+ 3 files changed, 24 insertions(+), 1 deletion(-)
+
+diff --git a/src/seat.c b/src/seat.c
+index 4c0149b..c95c1ce 100644
+--- a/src/seat.c
++++ b/src/seat.c
+@@ -939,7 +939,16 @@ configure_session (Session *session, SessionConfig *config, const gchar *session
+ {
+     session_set_config (session, config);
+     session_set_env (session, "XDG_SESSION_DESKTOP", session_name);
+-    session_set_env (session, "DESKTOP_SESSION", session_name);
++
++    gchar **name = session_config_get_name (config);
++    if (name)
++    {
++        g_autofree gchar *value = g_strjoinv (":", name);
++        session_set_env (session, "DESKTOP_SESSION", value);
++    }
++    else
++        session_set_env (session, "DESKTOP_SESSION", session_name);
++
+     session_set_env (session, "GDMSESSION", session_name);
+     gchar **desktop_names = session_config_get_desktop_names (config);
+     if (desktop_names)
+diff --git a/src/session-config.c b/src/session-config.c
+index e1b56f0..07a51c8 100644
+--- a/src/session-config.c
++++ b/src/session-config.c
+@@ -16,6 +16,9 @@ struct SessionConfigPrivate
+     /* Session type */
+     gchar *session_type;
+ 
++    /* name */
++    gchar **name;
++
+     /* Desktop names */
+     gchar **desktop_names;
+ 
+@@ -50,6 +53,8 @@ session_config_new_from_file (const gchar *filename, const gchar *default_sessio
+     if (!priv->session_type)
+         priv->session_type = g_strdup (default_session_type);
+ 
++    priv->name = g_key_file_get_string_list (desktop_file, G_KEY_FILE_DESKTOP_GROUP, "Name", NULL, NULL);
++
+     priv->desktop_names = g_key_file_get_string_list (desktop_file, G_KEY_FILE_DESKTOP_GROUP, "DesktopNames", NULL, NULL);
+     if (!priv->desktop_names)
+     {
+@@ -89,6 +94,14 @@ session_config_get_desktop_names (SessionConfig *config)
+     return priv->desktop_names;
+ }
+ 
++gchar **
++session_config_get_name (SessionConfig *config)
++{
++    SessionConfigPrivate *priv = session_config_get_instance_private (config);
++    g_return_val_if_fail (config != NULL, NULL);
++    return priv->name;
++}
++
+ gboolean
+ session_config_get_allow_greeter (SessionConfig *config)
+ {
+diff --git a/src/session-config.h b/src/session-config.h
+index 226aa7d..ddc08c6 100644
+--- a/src/session-config.h
++++ b/src/session-config.h
+@@ -44,6 +44,8 @@ const gchar *session_config_get_command (SessionConfig *config);
+ 
+ const gchar *session_config_get_session_type (SessionConfig *config);
+ 
++gchar **session_config_get_name (SessionConfig *config);
++
+ gchar **session_config_get_desktop_names (SessionConfig *config);
+ 
+ gboolean session_config_get_allow_greeter (SessionConfig *config);
+-- 
+2.20.1
+

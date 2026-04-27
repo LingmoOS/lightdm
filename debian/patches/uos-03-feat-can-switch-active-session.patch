@@ -1,0 +1,60 @@
+Index: lightdm/common/configuration.c
+===================================================================
+--- lightdm.orig/common/configuration.c
++++ lightdm/common/configuration.c
+@@ -373,6 +373,7 @@ config_init (Configuration *config)
+     g_hash_table_insert (config->priv->seat_keys, "greeter-show-remote-login", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "user-session", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "allow-user-switching", GINT_TO_POINTER (KEY_SUPPORTED));
++    g_hash_table_insert (config->priv->seat_keys, "allow-switch-active-session", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "allow-guest", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "guest-session", GINT_TO_POINTER (KEY_SUPPORTED));
+     g_hash_table_insert (config->priv->seat_keys, "session-wrapper", GINT_TO_POINTER (KEY_SUPPORTED));
+Index: lightdm/data/lightdm.conf
+===================================================================
+--- lightdm.orig/data/lightdm.conf
++++ lightdm/data/lightdm.conf
+@@ -69,6 +69,7 @@
+ # greeter-show-remote-login = True if the greeter should offer a remote login option
+ # user-session = Session to load for users
+ # allow-user-switching = True if allowed to switch users
++# allow-switch-active-session = True if allowed to switch active users
+ # allow-guest = True if guest login is allowed
+ # guest-session = Session to load for guests (overrides user-session)
+ # session-wrapper = Wrapper script to run session with
+@@ -112,6 +113,7 @@
+ #greeter-show-remote-login=true
+ #user-session=default
+ #allow-user-switching=true
++#allow-switch-active-session=false
+ #allow-guest=true
+ #guest-session=
+ #session-wrapper=lightdm-session
+Index: lightdm/src/lightdm.c
+===================================================================
+--- lightdm.orig/src/lightdm.c
++++ lightdm/src/lightdm.c
+@@ -784,6 +784,8 @@ main (int argc, char **argv)
+         config_set_boolean (config_get_instance (), "Seat:*", "start-session", TRUE);
+     if (!config_has_key (config_get_instance (), "Seat:*", "allow-user-switching"))
+         config_set_boolean (config_get_instance (), "Seat:*", "allow-user-switching", TRUE);
++    if (!config_has_key (config_get_instance (), "Seat:*", "allow-switch-active-session"))
++        config_set_boolean (config_get_instance (), "Seat:*", "allow-switch-active-session", FALSE);
+     if (!config_has_key (config_get_instance (), "Seat:*", "allow-guest"))
+         config_set_boolean (config_get_instance (), "Seat:*", "allow-guest", TRUE);
+     if (!config_has_key (config_get_instance (), "Seat:*", "greeter-allow-guest"))
+Index: lightdm/src/seat.c
+===================================================================
+--- lightdm.orig/src/seat.c
++++ lightdm/src/seat.c
+@@ -1493,8 +1493,9 @@ seat_switch_to_user (Seat *seat, const g
+         return FALSE;
+ 
+     /* If we're already on this session, then ignore */
++    gboolean can_switch_active_user = config_get_boolean (config_get_instance (), "LightDM", "allow-switch-active-session");
+     Session *session = find_user_session (seat, username, NULL);
+-    if (session && session == priv->active_session)
++    if (!can_switch_active_user && session && session == priv->active_session)
+         return TRUE;
+ 
+     l_debug (seat, "Switching to user %s", username);

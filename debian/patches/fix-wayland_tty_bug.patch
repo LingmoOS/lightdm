@@ -1,0 +1,118 @@
+Index: b/src/seat.c
+===================================================================
+--- a/src/seat.c
++++ b/src/seat.c
+@@ -54,6 +54,8 @@ struct SeatPrivate
+     /* The session belonging to the active greeter user */
+     Session *next_session;
+ 
++    Session* wayland_mode_session_to_activate;
++
+     /* The session to set active when it starts */
+     Session *session_to_activate;
+ 
+@@ -448,6 +450,21 @@ display_server_stopped_cb (DisplayServer
+         return;
+     }
+ 
++    if (priv->wayland_mode_session_to_activate) {
++        l_debug(seat, "wayland mode, start wayland display server");
++
++        Session* session = priv->wayland_mode_session_to_activate;
++        priv->wayland_mode_session_to_activate = NULL;
++
++        DisplayServer *display_server = create_display_server (seat, session);
++        session_set_display_server (session, display_server);
++        if (!start_display_server (seat, display_server))
++        {
++            l_debug (seat, "Failed to start display server for new session");
++        }
++        return;
++    }
++
+     /* Stop all sessions on this display server */
+     GList *list = g_list_copy (priv->sessions);
+     for (GList *link = list; link; link = link->next)
+@@ -756,6 +773,12 @@ session_stopped_cb (Session *session, Se
+         return;
+     }
+ 
++    if (priv->wayland_mode_session_to_activate) {
++        l_debug(seat, "wayland mode, stop display server");
++        display_server_stop(display_server);
++        return;
++    }
++
+     /* If there is a pending replacement greeter, start it */
+     if (IS_GREETER_SESSION (session) && priv->replacement_greeter)
+     {
+@@ -1182,15 +1205,21 @@ greeter_start_session_cb (Greeter *greet
+         }
+     }
+ 
+-    /* Otherwise start a new display server for this session */
+-    DisplayServer *display_server = create_display_server (seat, session);
+-    session_set_display_server (session, display_server);
+-    if (!start_display_server (seat, display_server))
+-    {
+-        l_debug (seat, "Failed to start display server for new session");
+-        return FALSE;
++    if (strcmp("wayland", session_get_session_type(session)) == 0) {
++        l_debug(seat, "wayland mode, stop greeter session");
++        priv->wayland_mode_session_to_activate = session;
++        session_stop(greeter_session);
++    } else {
++        /* Otherwise start a new display server for this session */
++        DisplayServer *display_server = create_display_server (seat, session);
++        session_set_display_server (session, display_server);
++        if (!start_display_server (seat, display_server))
++        {
++            l_debug (seat, "Failed to start display server for new session");
++            return FALSE;
++        }
+     }
+-
++    
+     return TRUE;
+ }
+ 
+@@ -1836,6 +1865,7 @@ seat_init (Seat *seat)
+ 
+     priv->properties = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+     priv->share_display_server = TRUE;
++    priv->wayland_mode_session_to_activate = NULL;
+ }
+ 
+ static void
+@@ -1861,6 +1891,7 @@ seat_finalize (GObject *object)
+     g_clear_object (&priv->next_session);
+     g_clear_object (&priv->session_to_activate);
+     g_clear_object (&priv->replacement_greeter);
++    g_clear_object (&priv->wayland_mode_session_to_activate);
+ 
+     G_OBJECT_CLASS (seat_parent_class)->finalize (object);
+ }
+Index: b/src/x-server-local.c
+===================================================================
+--- a/src/x-server-local.c
++++ b/src/x-server-local.c
+@@ -152,11 +152,18 @@ display_number_in_use (guint display_num
+     return in_use;
+ }
+ 
++static gboolean
++socket_number_in_use (guint number)
++{
++    g_autofree gchar *path = g_strdup_printf ("/tmp/.X11-unix/X%d", number);
++    return g_file_test (path, G_FILE_TEST_EXISTS);
++}
++
+ guint
+ x_server_local_get_unused_display_number (void)
+ {
+     guint number = config_get_integer (config_get_instance (), "LightDM", "minimum-display-number");
+-    while (display_number_in_use (number))
++    while (display_number_in_use (number) || socket_number_in_use(number))
+         number++;
+ 
+     display_numbers = g_list_append (display_numbers, GUINT_TO_POINTER (number));
