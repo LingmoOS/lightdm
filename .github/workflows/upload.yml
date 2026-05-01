@@ -32,6 +32,13 @@ jobs:
           wget https://cdimage-cdn77.deepin.org/beige/pool/main/l/lightdm/lightdm_1.30.0.orig.tar.gz
           mv lightdm_1.30.0.orig.tar.gz ../
           rm -r .github/
+      
+      - name: Commit local changes as patch
+        run: |
+          dpkg-source --commit . <<EOF
+      ci-fix
+      Auto patch from CI
+      EOF
 
       - name: Build source package
         run: |
