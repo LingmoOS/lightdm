@@ -20,13 +20,18 @@ jobs:
         run: |
           apt-get update
           apt-get install -y sudo git ca-certificates
-          apt-get install -y equivs curl git devscripts debhelper lintian build-essential automake autotools-dev cmake g++
+          apt-get install -y equivs wget git devscripts debhelper lintian build-essential automake autotools-dev cmake g++
       
       - name: Checkout Source
         uses: actions/checkout@v4
 
       # - name: Install build dependencies
       #   run: mk-build-deps -i -t "apt-get --yes" -r
+      - name: Get Source Package
+        run: |
+          wget https://cdimage-cdn77.deepin.org/beige/pool/main/l/lightdm/lightdm_1.30.0.orig.tar.gz
+          mv lightdm_1.30.0.orig.tar.gz ../
+          rm -r .github/
 
       - name: Build source package
         run: |
