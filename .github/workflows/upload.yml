@@ -36,9 +36,9 @@ jobs:
       - name: Commit local changes as patch
         run: |
           dpkg-source --commit . <<EOF
-      ci-fix
-      Auto patch from CI
-      EOF
+          ci-fix
+          Auto patch from CI
+          EOF
 
       - name: Build source package
         run: |
