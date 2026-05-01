@@ -35,10 +35,9 @@ jobs:
       
       - name: Commit local changes as patch
         run: |
-          dpkg-source --commit . <<EOF
-          ci-fix
-          Auto patch from CI
-          EOF
+          export DEBIAN_FRONTEND=noninteractive
+          export EDITOR=true
+          printf "ci-fix\nAuto patch from CI\n" | dpkg-source --commit . || true
 
       - name: Build source package
         run: |
