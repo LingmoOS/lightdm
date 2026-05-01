@@ -1,3 +1,9 @@
+lightdm (1.30.0-1+lingmo1) unstable; urgency=medium
+
+  * new release for Lingmo OS.
+
+ -- Lingmo OS Team <team@lingmo.org>  Fri, 01 May 2026 21:14:00 +0800
+
 lightdm (1.30.0-0deepin6) unstable; urgency=medium
 
   * fix: adjust OOMScore for lightdm service
