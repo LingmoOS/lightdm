@@ -207,7 +207,11 @@ diff --git a/configure.ac b/configure.ac
 +      fi
 +    ])
 +
-+    QT6_VALIDATE_MOC(MOC6)
++    if test -x /usr/lib/qt6/libexec/moc; then
++        MOC6=/usr/lib/qt6/libexec/moc
++    else
++        QT6_VALIDATE_MOC(MOC6)
++    fi
 +    if test x$MOC6 = x; then
 +        compile_liblightdm_qt6=no
 +        if test "x$enable_liblightdm_qt6" != xauto; then
